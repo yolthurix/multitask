@@ -154,15 +154,3 @@ inline void yield() {
     
     label: ;
 }
-
-void test_func(int x, int y) {
-    int z = x + y;
-    return;
-}
-
-int main() {
-    queue_new_task(test_func, 2, 3, 4);
-    yield();
-
-    return 0;
-}
