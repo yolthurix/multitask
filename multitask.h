@@ -1,156 +1,156 @@
-#include "stdio.h"
 #include "stdlib.h"
-#include "stdbool.h"
 #include "stdarg.h"
+#include "stdbool.h"
+
+#define INITIAL_MAX_TASKS 100
 
 struct Task {
-    int id;
-
+    void *instruction_pointer;
     void *stack_pointer;
     void *base_pointer;
-    void *instruction_pointer;
 
-    bool setup_arguments;
-    int argument_count;
-    int arguments[5];
+    bool setup_args;
+    int arg_count;
+    int args[6];
 };
 
-// hackiest queue with only 100 entries
-struct Task task_queue[100];
-int current_index_to_execute = 0;
-int current_index_to_add = 0;
+int max_tasks = INITIAL_MAX_TASKS;
+int task_count = 0;
 
-int current_id = 0;
+struct Task *next_free_task = NULL;
+struct Task *next_executable_task = NULL;
+struct Task *tasks = NULL;
 
-struct Task *queue_task(void (*func)(), void *stack_pointer, void *base_pointer) {
-    if (stack_pointer == NULL) {
-        task_queue[current_index_to_add].stack_pointer = malloc(1000*sizeof(char)) + 500;
-        task_queue[current_index_to_add].base_pointer = task_queue[current_index_to_add].stack_pointer;
-        task_queue[current_index_to_add].id = current_index_to_add;
+void handle_function_return();
+
+void queue_task(struct Task task) {
+    if (tasks == NULL) {
+        tasks = calloc(max_tasks, sizeof(struct Task));
+        next_free_task = tasks;
+        next_executable_task = tasks;
+    }
+
+    if (next_free_task == tasks + max_tasks) {
+        next_free_task = tasks;
+    }
+    
+    *next_free_task++ = task;
+}
+
+struct Task *get_next_task() {
+    if (next_executable_task == tasks + max_tasks) {
+        next_executable_task = tasks;
+    }
+
+    return next_executable_task++;
+}
+
+struct Task create_task_struct(void *ins_ptr, void *base_ptr, void *stack_ptr, int arg_count, int args[6]) {
+    struct Task task;
+
+    task.instruction_pointer = ins_ptr;
+    task.stack_pointer = stack_ptr;
+    task.base_pointer = base_ptr;
+    task.setup_args = arg_count;
+    task.arg_count = arg_count;
+
+    for (int i = 0; i < arg_count; i++) {
+        task.args[i] = args[i];
+    }
+
+    return task; 
+}
+
+struct Task create_task(void *ins_ptr, bool allocate_new_stack, int arg_count, ...) {
+    void *stack_ptr, *base_ptr;
+    int args[6];
+
+    if (allocate_new_stack) {
+        stack_ptr = malloc(1000*sizeof(char)) + 500;
+        base_ptr = stack_ptr;
+
+        va_list va_ptr;
+        va_start(va_ptr, arg_count);
+        
+        for (int i = 0; i < arg_count; i++) {
+            args[i] = va_arg(va_ptr, int);
+        }
+
+        va_end(va_ptr);
+
+        asm ("mov [%1], %0;" :: "r" (handle_function_return), "r" (base_ptr));
     } else {
-        task_queue[current_index_to_add].stack_pointer = stack_pointer;
-        task_queue[current_index_to_add].base_pointer = base_pointer;
-        task_queue[current_index_to_add].id = current_id;
+        asm ("mov rax, rbp; add rax, 0x10; mov %0, rax;" : "=r" (stack_ptr));
+        asm ("mov %0, [rbp];" : "=r" (base_ptr));
     }
 
-    task_queue[current_index_to_add].instruction_pointer = func;
-    task_queue[current_index_to_add].setup_arguments = false;
-
-    return &task_queue[current_index_to_add++];
+    return create_task_struct(ins_ptr, base_ptr, stack_ptr, arg_count, args);
 }
-
-// floating point and excess arguments not supported
-struct Task *queue_new_task(void (*func)(), int argument_count, ...) {
-    va_list arg_pointer;
-    va_start(arg_pointer, argument_count);
-
-    struct Task *task = queue_task(func, NULL, NULL);
-
-    int i;
-
-    for (i = 0; i < argument_count; i++) {
-        task->arguments[i] = va_arg(arg_pointer, int);
-    }
-
-    va_end(arg_pointer);
-
-    task->argument_count = i;
-    task->setup_arguments = true;
-
-    return task;
-}
-
-#define current_task (&task_queue[current_index_to_execute-1])
 
 void handle_function_return() {
-    current_index_to_execute++;
+    register struct Task *task = get_next_task();
     
-    if (current_task->setup_arguments) {
-        for (int i = 0; i <= current_task->argument_count; i++) {
+    if (task->setup_args) {
+        for (int i = 0; i <= task->arg_count; i++) {
             switch (i) { // add more
                 case 0:
-                    asm ("mov edi, %0" :: "r" (current_task->arguments[i]));
+                    asm ("mov edi, %0" :: "r" (task->args[i]));
                     break;
                 case 1:
-                    asm ("mov esi, %0" :: "r" (current_task->arguments[i]));
+                    asm ("mov esi, %0" :: "r" (task->args[i]));
                     break;
                 case 2:
-                    asm ("mov edx, %0" :: "r" (current_task->arguments[i]));
+                    asm ("mov edx, %0" :: "r" (task->args[i]));
                     break;
             }
         }
 
-        current_task->setup_arguments = false;
+        task->setup_args = false;
     }
 
-    asm ("mov rsp, %0;"
-        :
-        : "r" (current_task->stack_pointer));
-
-    asm ("mov rbp, %0;"
-        :
-        : "r" (current_task->base_pointer));
-
-    asm ("mov [rbp], %0;"
-        :
-        : "r" (handle_function_return));
-
-    asm ("jmp %0;"
-        :
-        : "r" (current_task->instruction_pointer));
+    asm ("mov rsp, %0;" :: "r" (task->stack_pointer));
+    asm ("mov rbp, %0;" :: "r" (task->base_pointer));
+    asm ("jmp %0;" :: "r" (task->instruction_pointer));
 }
 
-__always_inline
-inline void yield() {
-    void *return_address = &&label;
-    void *original_base_pointer;
-    void *original_stack_pointer;
+void yield(bool queue_continuation) {
+    if (queue_continuation) {
+        void *stack_ptr, *base_ptr, *return_address;
 
-    asm ("mov %0, rbp;"
-            : "=r" (original_base_pointer));
+        asm ("mov rax, rbp; add rax, 0x10; mov %0, rax;" : "=r" (stack_ptr));
+        asm ("mov %0, [rbp];" : "=r" (base_ptr));
+        asm ("mov %0, [rbp + 8];" : "=r" (return_address));
 
-    asm ("mov %0, rsp;"
-            : "=r" (original_stack_pointer));
+        struct Task task = create_task_struct(return_address, base_ptr, stack_ptr, 0, NULL);
 
-    queue_task(return_address, original_stack_pointer, original_base_pointer);
+        queue_task(task);
+    }
 
-    // setupping to go to next task
-
-    current_index_to_execute++;
+    // this is going to segfault if queue_continuation is false and tasks are not initialized
+    // or if tasks are initialized but no new tasks are queued this is going to result in undefined behaviour
+    register struct Task *task = get_next_task(); 
     
-    if (current_task->setup_arguments) {
-        for (int i = 0; i <= current_task->argument_count; i++) {
+    if (task->setup_args) {
+        for (int i = 0; i <= task->arg_count; i++) {
             switch (i) { // add more
                 case 0:
-                    asm ("mov edi, %0" :: "r" (current_task->arguments[i]));
+                    asm ("mov edi, %0" :: "r" (task->args[i]));
                     break;
                 case 1:
-                    asm ("mov esi, %0" :: "r" (current_task->arguments[i]));
+                    asm ("mov esi, %0" :: "r" (task->args[i]));
                     break;
                 case 2:
-                    asm ("mov edx, %0" :: "r" (current_task->arguments[i]));
+                    asm ("mov edx, %0" :: "r" (task->args[i]));
                     break;
             }
         }
 
-        current_task->setup_arguments = false;
+        task->setup_args = false;
     }
 
-    asm ("mov rsp, %0;"
-        :
-        : "r" (current_task->stack_pointer));
-
-    asm ("mov rbp, %0;"
-        :
-        : "r" (current_task->base_pointer));
-
-    asm ("mov [rbp], %0;"
-        :
-        : "r" (handle_function_return));
-
-    asm ("jmp %0;"
-        :
-        : "r" (current_task->instruction_pointer));
+    asm ("mov rsp, %0;" :: "r" (task->stack_pointer));
+    asm ("mov rbp, %0;" :: "r" (task->base_pointer));
+    asm ("jmp %0;" :: "r" (task->instruction_pointer));
     
     label: ;
 }
