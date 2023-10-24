@@ -11,7 +11,7 @@ struct Task {
 
     bool setup_args;
     int arg_count;
-    int args[6];
+    long args[6];
 };
 
 int max_tasks = INITIAL_MAX_TASKS;
@@ -45,7 +45,7 @@ struct Task *get_next_task() {
     return next_executable_task++;
 }
 
-struct Task create_task_struct(void *ins_ptr, void *base_ptr, void *stack_ptr, int arg_count, int args[6]) {
+struct Task create_task_struct(void *ins_ptr, void *base_ptr, void *stack_ptr, int arg_count, long args[6]) {
     struct Task task;
 
     task.instruction_pointer = ins_ptr;
@@ -63,7 +63,7 @@ struct Task create_task_struct(void *ins_ptr, void *base_ptr, void *stack_ptr, i
 
 struct Task create_task(void *ins_ptr, bool allocate_new_stack, int arg_count, ...) {
     void *stack_ptr, *base_ptr;
-    int args[6];
+    long args[6];
 
     if (allocate_new_stack) {
         stack_ptr = malloc(1000*sizeof(char)) + 500;
@@ -73,7 +73,7 @@ struct Task create_task(void *ins_ptr, bool allocate_new_stack, int arg_count, .
         va_start(va_ptr, arg_count);
         
         for (int i = 0; i < arg_count; i++) {
-            args[i] = va_arg(va_ptr, int);
+            args[i] = va_arg(va_ptr, long);
         }
 
         va_end(va_ptr);
@@ -94,13 +94,13 @@ void handle_function_return() {
         for (int i = 0; i <= task->arg_count; i++) {
             switch (i) { // add more
                 case 0:
-                    asm ("mov edi, %0" :: "r" (task->args[i]));
+                    asm ("mov rdi, %0" :: "r" (task->args[i]));
                     break;
                 case 1:
-                    asm ("mov esi, %0" :: "r" (task->args[i]));
+                    asm ("mov rsi, %0" :: "r" (task->args[i]));
                     break;
                 case 2:
-                    asm ("mov edx, %0" :: "r" (task->args[i]));
+                    asm ("mov rdx, %0" :: "r" (task->args[i]));
                     break;
             }
         }
@@ -134,13 +134,13 @@ void yield(bool queue_continuation) {
         for (int i = 0; i <= task->arg_count; i++) {
             switch (i) { // add more
                 case 0:
-                    asm ("mov edi, %0" :: "r" (task->args[i]));
+                    asm ("mov rdi, %0" :: "r" (task->args[i]));
                     break;
                 case 1:
-                    asm ("mov esi, %0" :: "r" (task->args[i]));
+                    asm ("mov rsi, %0" :: "r" (task->args[i]));
                     break;
                 case 2:
-                    asm ("mov edx, %0" :: "r" (task->args[i]));
+                    asm ("mov rdx, %0" :: "r" (task->args[i]));
                     break;
             }
         }
