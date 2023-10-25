@@ -88,17 +88,17 @@ struct Task multitask_create_task(void *ins_ptr, bool allocate_new_stack, int ar
 
         va_end(va_ptr);
 
-        asm ("mov [%1], %0;" :: "r" (handle_function_return), "r" (base_ptr));
+        asm ("mov [%1], %0;" :: "r" (multitask_handle_function_return), "r" (base_ptr));
     } else {
         asm ("mov rax, rbp; add rax, 0x10; mov %0, rax;" : "=r" (stack_ptr));
         asm ("mov %0, [rbp];" : "=r" (base_ptr));
     }
 
-    return create_task_struct(ins_ptr, base_ptr, stack_ptr, arg_count, args);
+    return multitask_create_task_struct(ins_ptr, base_ptr, stack_ptr, arg_count, args);
 }
 
 void multitask_handle_function_return() {
-    register struct Task *task = get_next_task();
+    register struct Task *task = multitask_get_next_task();
     
     if (task->setup_args) {
         for (int i = 0; i <= task->arg_count; i++) {
@@ -131,14 +131,14 @@ void multitask_yield(bool queue_continuation) {
         asm ("mov %0, [rbp];" : "=r" (base_ptr));
         asm ("mov %0, [rbp + 8];" : "=r" (return_address));
 
-        struct Task task = create_task_struct(return_address, base_ptr, stack_ptr, 0, NULL);
+        struct Task task = multitask_create_task_struct(return_address, base_ptr, stack_ptr, 0, NULL);
 
-        queue_task(task);
+        multitask_queue_task(task);
     }
 
     // this is going to segfault if queue_continuation is false and tasks are not initialized
     // or if tasks are initialized but no new tasks are queued this is going to result in undefined behaviour
-    register struct Task *task = get_next_task(); 
+    register struct Task *task = multitask_get_next_task(); 
     
     if (task->setup_args) {
         for (int i = 0; i <= task->arg_count; i++) {
