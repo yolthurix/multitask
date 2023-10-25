@@ -1,3 +1,6 @@
+#ifndef MULTITASK_H
+#define MULTITASK_H
+
 #include "stdlib.h"
 #include "stdarg.h"
 #include "stdbool.h"
@@ -14,6 +17,15 @@ struct Task {
     long args[6];
 };
 
+void multitask_queue_task(struct Task task);
+struct Task *multitask_get_next_task();
+struct Task multitask_create_task_struct(void *ins_ptr, void *base_ptr, void *stack_ptr, int arg_count, long args[6]);
+struct Task multitask_create_task(void *ins_ptr, bool allocate_new_stack, int arg_count, ...);
+void multitask_handle_function_return();
+void multitask_yield(bool queue_continuation);
+
+#ifdef MULTITASK_IMPLEMENTATION
+
 int max_tasks = INITIAL_MAX_TASKS;
 int task_count = 0;
 
@@ -21,9 +33,7 @@ struct Task *next_free_task = NULL;
 struct Task *next_executable_task = NULL;
 struct Task *tasks = NULL;
 
-void handle_function_return();
-
-void queue_task(struct Task task) {
+void multitask_queue_task(struct Task task) {
     if (tasks == NULL) {
         tasks = calloc(max_tasks, sizeof(struct Task));
         next_free_task = tasks;
@@ -37,7 +47,7 @@ void queue_task(struct Task task) {
     *next_free_task++ = task;
 }
 
-struct Task *get_next_task() {
+struct Task *multitask_get_next_task() {
     if (next_executable_task == tasks + max_tasks) {
         next_executable_task = tasks;
     }
@@ -45,7 +55,7 @@ struct Task *get_next_task() {
     return next_executable_task++;
 }
 
-struct Task create_task_struct(void *ins_ptr, void *base_ptr, void *stack_ptr, int arg_count, long args[6]) {
+struct Task multitask_create_task_struct(void *ins_ptr, void *base_ptr, void *stack_ptr, int arg_count, long args[6]) {
     struct Task task;
 
     task.instruction_pointer = ins_ptr;
@@ -61,7 +71,7 @@ struct Task create_task_struct(void *ins_ptr, void *base_ptr, void *stack_ptr, i
     return task; 
 }
 
-struct Task create_task(void *ins_ptr, bool allocate_new_stack, int arg_count, ...) {
+struct Task multitask_create_task(void *ins_ptr, bool allocate_new_stack, int arg_count, ...) {
     void *stack_ptr, *base_ptr;
     long args[6];
 
@@ -87,7 +97,7 @@ struct Task create_task(void *ins_ptr, bool allocate_new_stack, int arg_count, .
     return create_task_struct(ins_ptr, base_ptr, stack_ptr, arg_count, args);
 }
 
-void handle_function_return() {
+void multitask_handle_function_return() {
     register struct Task *task = get_next_task();
     
     if (task->setup_args) {
@@ -113,7 +123,7 @@ void handle_function_return() {
     asm ("jmp %0;" :: "r" (task->instruction_pointer));
 }
 
-void yield(bool queue_continuation) {
+void multitask_yield(bool queue_continuation) {
     if (queue_continuation) {
         void *stack_ptr, *base_ptr, *return_address;
 
@@ -154,3 +164,6 @@ void yield(bool queue_continuation) {
     
     label: ;
 }
+
+#endif
+#endif
