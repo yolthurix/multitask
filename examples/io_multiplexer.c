@@ -1,6 +1,9 @@
 #include "poll.h"
 #include "sys/socket.h"
 #include "netinet/in.h"
+#include "stdio.h"
+
+#define MULTITASK_IMPLEMENTATION
 #include "../multitask.h"
 
 struct pollfd polling_fds[10] = { 0 };
@@ -25,16 +28,16 @@ void poll_events() {
         if (ready != 0) {
             for (int i = 0; i < number_of_fds; i++) {
                 if (polling_fds[i].revents & POLLIN) {
-                    queue_task(*in_event_callbacks[i]);
+                    multitask_queue_task(*in_event_callbacks[i]);
                 }
 
                 if (polling_fds[i].revents & POLLOUT) {
-                    queue_task(*out_event_callbacks[i]);
+                    multitask_queue_task(*out_event_callbacks[i]);
                 }
             }
         }
 
-        yield(true);
+        multitask_yield(true);
     }
 }
 
@@ -67,25 +70,18 @@ void set_event_callback(int fd, short events, struct Task *callback_task) {
 }
 
 int await_accept(int fd) {
-    struct Task callback_task = create_task(&&callback, false, 0);
+    struct Task callback_task = multitask_create_task(&&callback, false, 0);
 
     set_event_callback(fd, POLLIN, &callback_task);
 
     printf("yielding\n");
 
-    yield(false);
+    multitask_yield(false);
     callback: ;
 
     printf("called back\n");
 
     return accept(fd, NULL, NULL);
-}
-
-void test_func(char *string) {
-    while (1) {
-        printf("%s\n", string);
-        yield(true);
-    }
 }
 
 //void await_read() {}
@@ -94,8 +90,7 @@ void test_func(char *string) {
 int main() {
     char *string = "array of characters";
 
-    queue_task(create_task(poll_events, true, 0));
-    queue_task(create_task(test_func, true, 1, string));
+    multitask_queue_task(multitask_create_task(poll_events, true, 0));
 
     int server_fd = setup_server_socket();
 
@@ -104,6 +99,7 @@ int main() {
 
     while (1) {
         int fd = await_accept(server_fd);
+        polling_fds[number_of_fds++].fd = fd;
         printf("client connected\n");
     }
     return;
