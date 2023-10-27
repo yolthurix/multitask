@@ -3,7 +3,6 @@
 #include "netinet/in.h"
 #include "stdio.h"
 
-#define MULTITASK_IMPLEMENTATION
 #include "../multitask.h"
 
 struct pollfd polling_fds[10] = { 0 };

@@ -24,8 +24,6 @@ struct Task multitask_create_task(void *ins_ptr, bool allocate_new_stack, int ar
 void multitask_handle_function_return();
 void multitask_yield(bool queue_continuation);
 
-#ifdef MULTITASK_IMPLEMENTATION
-
 int max_tasks = INITIAL_MAX_TASKS;
 int task_count = 0;
 
@@ -165,5 +163,4 @@ void multitask_yield(bool queue_continuation) {
     label: ;
 }
 
-#endif
 #endif
